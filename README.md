@@ -273,6 +273,14 @@ Reservations) and the staff journey (sign in → see the booking in Admin → vi
 unanswered questions), plus a full-page screenshot pass across every screen
 for visual review.
 
+## Deliverables
+
+Product/UX/engineering/AI decisions, evaluation scenarios with observed results, and the list of AI tools used during development are in [`deliverables/`](./deliverables):
+
+- [`06-decisions-note.md`](./deliverables/06-decisions-note.md) — customer problem, guest journey, frontend design rationale, AI-vs-deterministic split, failure handling, what we'd measure and improve
+- [`07-evaluation-and-results.md`](./deliverables/07-evaluation-and-results.md) — scenario matrix and observed test results
+- [`08-ai-tools-used.md`](./deliverables/08-ai-tools-used.md) — AI tools used during development
+
 ## Production improvements
 
 Before production:
