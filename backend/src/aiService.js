@@ -2,233 +2,198 @@ import OpenAI from "openai";
 import hotel from "../data/hotel.json" with { type: "json" };
 import { cleanHistory } from "./utils.js";
 
-// AI provider is fully OPTIONAL. If no key is set for either provider below,
-// the assistant runs entirely on the deterministic rule-based logic further
-// down this file — no external API calls, no cost, no billing risk.
-//
-// Two ways to enable a real LLM, both optional:
-//  1) GROQ_API_KEY  -> uses Groq's free tier (no credit card required,
-//     generous free rate limits). Recommended for this assignment.
-//  2) OPENAI_API_KEY -> uses OpenAI (this one is paid / requires billing
-//     credit on your OpenAI account — only set this if you intend to pay).
+// Provider chain, cheapest/most-available first. All optional — with none
+// set the assistant runs entirely on the deterministic engine below, so
+// the demo works with zero API keys and zero billing risk.
 let client = null;
 let model = null;
 let provider = "none";
 
-if (process.env.GEMINI_API_KEY) {
-  // Google Gemini exposes an OpenAI-compatible endpoint, so we can reuse
-  // the same OpenAI SDK client just by pointing baseURL at Google.
+if (process.env.GROQ_API_KEY) {
+  client = new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: "https://api.groq.com/openai/v1" });
+  model = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+  provider = "groq";
+} else if (process.env.GEMINI_API_KEY) {
   client = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
   });
   model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
   provider = "gemini";
-} else if (process.env.GROQ_API_KEY) {
-  client = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: "https://api.groq.com/openai/v1"
-  });
-  model = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
-  provider = "groq";
 } else if (process.env.OPENAI_API_KEY) {
   client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   model = process.env.OPENAI_MODEL || "gpt-4o-mini";
   provider = "openai";
 }
 
-const fallbackRules = [
-  {
-    keywords: ["check-in", "check in", "arrival"],
-    answer: `Check-in is at ${hotel.hotel.checkIn}.`
-  },
-  {
-    keywords: ["check-out", "check out", "departure"],
-    answer: `Check-out is at ${hotel.hotel.checkOut}.`
-  },
-  {
-    keywords: ["breakfast", "morning meal"],
-    answer: hotel.hotel.breakfast
-  },
-  {
-    keywords: ["pool", "swimming"],
-    answer: hotel.hotel.pool
-  },
-  {
-    keywords: ["wifi", "wi-fi", "internet"],
-    answer: hotel.hotel.wifi
-  },
-  {
-    keywords: ["cancel", "cancellation", "refund"],
-    answer: hotel.hotel.cancellation
-  },
-  {
-    keywords: ["parking", "car"],
-    answer: hotel.hotel.parking
-  },
-  {
-    keywords: ["address", "location", "where are you"],
-    answer: `Sunrise Suites is located at ${hotel.hotel.address}.`
+// --- Retrieval --------------------------------------------------------
+// Instead of handing the whole hotel.json blob to the model (expensive,
+// and harder to check for hallucination), break it into small labelled
+// sections and only retrieve the ones that actually match the question.
+function buildSections() {
+  const h = hotel.hotel;
+  const sections = [
+    { id: "checkin", text: `Check-in is at ${h.checkIn}.` },
+    { id: "checkout", text: `Check-out is at ${h.checkOut}.` },
+    { id: "breakfast", text: h.breakfast },
+    { id: "pool", text: h.pool },
+    { id: "wifi", text: h.wifi },
+    { id: "cancellation", text: h.cancellation },
+    { id: "parking", text: h.parking },
+    { id: "address", text: `Sunrise Suites is located at ${h.address}. Phone: ${h.phone}.` }
+  ];
+  for (const room of hotel.rooms) {
+    sections.push({
+      id: `room-${room.id}`,
+      text: `${room.name}: ${room.description} ${room.beds}, sleeps up to ${room.maxGuests} guests, ${room.size}, ₹${room.price.toLocaleString("en-IN")} per night${room.breakfastIncluded ? ", breakfast included" : ""}.`
+    });
   }
-];
+  return sections;
+}
+
+const SECTIONS = buildSections();
+const STOPWORDS = new Set(["the", "a", "an", "is", "are", "for", "and", "to", "of", "do", "you", "what", "your", "i", "me", "my", "have", "with", "in", "at", "on"]);
+
+function tokenize(text) {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
+}
+
+export function retrieveSections(message, limit = 4) {
+  const queryWords = tokenize(message);
+  if (queryWords.length === 0) return [];
+
+  const scored = SECTIONS.map((section) => {
+    const lowerText = section.text.toLowerCase();
+    const score = queryWords.reduce((sum, word) => sum + (lowerText.includes(word) ? 1 : 0), 0);
+    return { ...section, score };
+  }).filter((section) => section.score > 0);
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
 
 function findRoomAnswer(text) {
   const lower = text.toLowerCase();
-
-  if (lower.includes("room") && (lower.includes("three") || lower.includes("3"))) {
-    const room = hotel.rooms.find(r => r.maxGuests >= 3);
-    return `${room.name} can accommodate up to ${room.maxGuests} guests. It has ${room.beds}, is ${room.size}, and starts at ₹${room.price.toLocaleString("en-IN")} per night.`;
-  }
-
   if (lower.includes("room") && lower.includes("price")) {
-    return hotel.rooms
-      .map(r => `${r.name}: ₹${r.price.toLocaleString("en-IN")} per night.`)
-      .join(" ");
+    return hotel.rooms.map((r) => `${r.name}: ₹${r.price.toLocaleString("en-IN")} per night.`).join(" ");
   }
-
   return null;
 }
 
-function deterministicAnswer(message, history) {
-  const text = message.toLowerCase();
-
-  // Basic follow-up handling.
-  if (history.length > 0 && ["what about", "and", "how about"].some(p => text.startsWith(p))) {
-    if (text.includes("breakfast")) return hotel.hotel.breakfast;
-    if (text.includes("pool")) return hotel.hotel.pool;
-    if (text.includes("check")) return `Check-in is at ${hotel.hotel.checkIn} and check-out is at ${hotel.hotel.checkOut}.`;
-  }
-
+function deterministicAnswer(message, sections) {
   const roomAnswer = findRoomAnswer(message);
-  if (roomAnswer) return roomAnswer;
+  if (roomAnswer) return { answer: roomAnswer, grounded: true };
 
-  const rule = fallbackRules.find(item =>
-    item.keywords.some(keyword => text.includes(keyword))
-  );
-
-  if (rule) return rule.answer;
-
-  if (text.includes("available") || text.includes("availability")) {
-    return "I can check room availability for you. Please provide your check-in date, check-out date, and number of guests.";
+  if (sections.length > 0) {
+    return { answer: sections.map((s) => s.text).join(" "), grounded: true };
   }
 
-  return "I can help with Sunrise Suites rooms, check-in/check-out, breakfast, swimming pool, Wi-Fi, parking, cancellation policy, and room availability. What would you like to know?";
+  const lower = message.toLowerCase();
+  if (lower.includes("available") || lower.includes("availability") || lower.includes("book")) {
+    return {
+      answer: "I can help you check room availability — head to the \"Book a Stay\" tab and pick your dates and guest count.",
+      grounded: true
+    };
+  }
+
+  return {
+    answer: "I don't have that information in what I know about Sunrise Suites. I can help with check-in/check-out, breakfast, the pool, Wi-Fi, parking, cancellation policy, and room details.",
+    grounded: false
+  };
 }
 
-// Words that signal the guest wants to book/check dates/pick a room, so we
-// can surface the inline date-picker widget instead of just replying in text.
-const BOOKING_INTENT_WORDS = [
-  "book", "booking", "reserve", "reservation", "availability", "available",
-  "check in", "check-in", "checkin", "dates", "stay", "room", "suite", "pay", "payment"
-];
+const BOOKING_INTENT_WORDS = ["book", "booking", "reserve", "reservation", "availability", "available", "check in", "check-in", "checkin", "dates", "stay"];
 
 function hasBookingIntent(text) {
   const lower = text.toLowerCase();
-  return BOOKING_INTENT_WORDS.some(word => lower.includes(word));
+  return BOOKING_INTENT_WORDS.some((word) => lower.includes(word));
 }
 
-// Strips ```json ... ``` fences some models wrap structured output in.
 function stripCodeFences(text) {
   return text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
+function extractNumbers(text) {
+  return text.match(/\d[\d,.]*/g) ?? [];
+}
+
+// Hallucination guard: any number the model states that doesn't appear
+// anywhere in the sections we actually retrieved is treated as invented
+// (a price, a time, a guest count it made up), and we fall back to the
+// deterministic answer instead of showing it to the guest.
+export function isGrounded(reply, sections) {
+  const sourceText = sections.map((s) => s.text).join(" ");
+  const numbers = extractNumbers(reply);
+  return numbers.every((n) => sourceText.includes(n));
+}
+
 export async function answerQuestion({ message, history = [] }) {
   const safeHistory = cleanHistory(history);
+  const sections = retrieveSections(message);
+  const intent = hasBookingIntent(message) ? "booking" : "info";
 
   if (!client) {
-    const answer = deterministicAnswer(message, safeHistory);
-    return {
-      answer,
-      widget: hasBookingIntent(message) ? "date_picker" : "none",
-      source: "deterministic-fallback"
-    };
+    const { answer, grounded } = deterministicAnswer(message, sections);
+    return { answer, grounded, intent, source: "deterministic" };
   }
 
-  const hotelContext = JSON.stringify(hotel, null, 2);
+  const context = sections.length > 0 ? sections.map((s) => `- ${s.text}`).join("\n") : "(no matching hotel information found)";
 
-  const input = [
+  const messages = [
     {
       role: "system",
-      content: `You are the guest assistant for Sunrise Suites.
-Answer only using the hotel data supplied below.
-Do not invent amenities, prices, policies, room features, or availability.
-If the supplied data does not answer the question, say you do not have that information and offer a useful next step.
-Keep responses concise, warm and useful.
+      content: `You are the guest assistant for Sunrise Suites hotel.
+Answer ONLY using the RETRIEVED HOTEL INFORMATION below. Never invent a price, time, room feature, or policy that is not stated there.
+If the retrieved information does not answer the question, say so plainly and suggest what you *can* help with.
+Keep replies short, warm, and specific.
 
-This app shows booking steps as interactive chat widgets instead of separate
-pages, so you never need to ask the guest to type dates, pick a room, or
-confirm payment in plain text — a widget below your reply handles that.
+Respond with ONLY a compact JSON object, no markdown fences, no extra text, in exactly this shape:
+{"reply": "<short chat reply>", "grounded": true | false}
 
-Respond with ONLY a compact JSON object, no markdown fences, no extra text,
-in exactly this shape:
-{"reply": "<your short chat reply>", "widget": "none" | "date_picker"}
+Set "grounded" to false whenever the retrieved information does not actually answer the question (even if you still give a helpful general reply).
 
-Rules for "widget":
-- Use "date_picker" whenever the guest wants to check availability, book a
-  room, or mentions dates/guests for a stay — the widget lets them pick
-  check-in/check-out dates and guest count and shows real available rooms.
-  Keep "reply" short in this case, e.g. "Sure, pick your dates below:" —
-  do not list rooms or prices yourself, the widget does that with live data.
-- Use "none" for every other question (amenities, policies, general info).
-- Room selection and payment are handled by follow-up widgets automatically
-  after the guest picks dates, so you do not need to trigger those yourself.
-
-HOTEL DATA:
-${hotelContext}`
+RETRIEVED HOTEL INFORMATION:
+${context}`
     },
-    ...safeHistory.map(item => ({
-      role: item.role,
-      content: item.content
-    })),
-    {
-      role: "user",
-      content: message
-    }
+    ...safeHistory.map((item) => ({ role: item.role, content: item.content })),
+    { role: "user", content: message }
   ];
 
   try {
-    const response = await client.chat.completions.create({
-      model,
-      messages: input,
-      temperature: 0.3,
-      max_tokens: 400
-    });
-
+    const response = await client.chat.completions.create({ model, messages, temperature: 0.3, max_tokens: 300 });
     const raw = response.choices?.[0]?.message?.content?.trim();
 
     if (!raw) {
-      const answer = deterministicAnswer(message, safeHistory);
-      return { answer, widget: hasBookingIntent(message) ? "date_picker" : "none", source: provider };
+      const fallback = deterministicAnswer(message, sections);
+      return { answer: fallback.answer, grounded: fallback.grounded, intent, source: "deterministic (empty llm response)" };
     }
 
+    let parsed;
     try {
-      const parsed = JSON.parse(stripCodeFences(raw));
-      const widget = parsed.widget === "date_picker" ? "date_picker" : "none";
-      const answer = typeof parsed.reply === "string" && parsed.reply.trim()
-        ? parsed.reply.trim()
-        : deterministicAnswer(message, safeHistory);
-
-      return { answer, widget, source: provider };
+      parsed = JSON.parse(stripCodeFences(raw));
     } catch {
-      // Model didn't return valid JSON (can happen occasionally) — fall
-      // back to treating the raw text as the reply so the chat still works.
-      return {
-        answer: raw,
-        widget: hasBookingIntent(message) ? "date_picker" : "none",
-        source: `${provider} (unstructured)`
-      };
+      const fallback = deterministicAnswer(message, sections);
+      return { answer: fallback.answer, grounded: fallback.grounded, intent, source: "deterministic (unparseable llm response)" };
     }
+
+    const reply = typeof parsed.reply === "string" && parsed.reply.trim() ? parsed.reply.trim() : null;
+    if (!reply) {
+      const fallback = deterministicAnswer(message, sections);
+      return { answer: fallback.answer, grounded: fallback.grounded, intent, source: "deterministic (empty llm reply field)" };
+    }
+
+    if (!isGrounded(reply, sections)) {
+      const fallback = deterministicAnswer(message, sections);
+      return { answer: fallback.answer, grounded: fallback.grounded, intent, source: "deterministic (hallucination guard)" };
+    }
+
+    return { answer: reply, grounded: Boolean(parsed.grounded), intent, source: provider };
   } catch (error) {
-    // If the LLM call fails for any reason (bad key, no quota/credit,
-    // network issue, rate limit, etc.) we never surface that failure to
-    // the guest — we quietly fall back to the deterministic answer so the
-    // chat still works.
     console.error("LLM_CALL_FAILED", provider, error?.message || error);
-    const answer = deterministicAnswer(message, safeHistory);
-    return {
-      answer,
-      widget: hasBookingIntent(message) ? "date_picker" : "none",
-      source: "deterministic-fallback (llm error)"
-    };
+    const fallback = deterministicAnswer(message, sections);
+    return { answer: fallback.answer, grounded: fallback.grounded, intent, source: "deterministic (llm error)" };
   }
 }

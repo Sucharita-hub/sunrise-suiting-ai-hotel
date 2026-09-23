@@ -1,0 +1,17 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600&display=swap");
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .auth-grid {
+    grid-template-columns: 1.1fr 1fr;
+  }
+}
