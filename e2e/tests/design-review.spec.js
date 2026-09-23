@@ -37,7 +37,7 @@ test("shot: auth sign-up", async ({ page }) => {
 
 test("shot: chat with a message", async ({ page }) => {
   await signIn(page, GUEST);
-  await page.getByPlaceholder("Ask about rooms, breakfast, check-in...").fill("What time is check-in?");
+  await page.getByPlaceholder("Ask a question, or type / to see commands...").fill("What time is check-in?");
   await page.getByLabel("Send message").click();
   await page.waitForTimeout(1000);
   await page.screenshot({ path: `${SHOTS}/03-chat.png`, fullPage: true });

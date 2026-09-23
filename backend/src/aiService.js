@@ -94,7 +94,7 @@ function deterministicAnswer(message, sections) {
   const lower = message.toLowerCase();
   if (lower.includes("available") || lower.includes("availability") || lower.includes("book")) {
     return {
-      answer: "I can help you check room availability — head to the \"Book a Stay\" tab and pick your dates and guest count.",
+      answer: "Sure — pick your dates and guest count below and I'll check availability.",
       grounded: true
     };
   }
@@ -105,7 +105,11 @@ function deterministicAnswer(message, sections) {
   };
 }
 
-const BOOKING_INTENT_WORDS = ["book", "booking", "reserve", "reservation", "availability", "available", "check in", "check-in", "checkin", "dates", "stay"];
+// Deliberately narrow: "check-in"/"dates"/"stay" are informational words
+// (guests ask what time check-in is, that's a KB question, not a booking
+// action) and including them here used to hijack real KB questions with
+// the booking nudge. Only words that signal an actual intent to reserve.
+const BOOKING_INTENT_WORDS = ["book", "reserve", "reservation", "availability", "available"];
 
 function hasBookingIntent(text) {
   const lower = text.toLowerCase();
@@ -151,6 +155,14 @@ export async function answerQuestion({ message, history = [] }) {
   const safeHistory = cleanHistory(history);
   const sections = retrieveSections(message);
   const intent = hasBookingIntent(message) ? "booking" : "info";
+
+  // A clear booking-intent message (e.g. "I'd like to book a room") also
+  // scores against room-description sections purely because both mention
+  // "room" — without this, the guest would get a KB dump instead of the
+  // short nudge that belongs next to the inline date-picker widget.
+  if (intent === "booking") {
+    return { answer: "Sure — pick your dates and guest count below and I'll check availability.", grounded: true, intent, source: "deterministic" };
+  }
 
   if (!client) {
     const { answer, grounded } = deterministicAnswer(message, sections);

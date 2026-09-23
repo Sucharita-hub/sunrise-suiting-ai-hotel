@@ -33,7 +33,7 @@ test("guest can chat, book a stay, pay, and see it in My Reservations; staff see
   await signIn(page, GUEST);
 
   // --- Chat: grounded knowledge-base answer -------------------------------
-  await page.getByPlaceholder("Ask about rooms, breakfast, check-in...").fill("What time is check-in?");
+  await page.getByPlaceholder("Ask a question, or type / to see commands...").fill("What time is check-in?");
   await page.getByLabel("Send message").click();
   await expect(page.getByText(/3:00 PM/i)).toBeVisible({ timeout: 15_000 });
 
