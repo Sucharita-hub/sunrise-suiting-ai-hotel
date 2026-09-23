@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionIcon, Avatar, Box, Button, Drawer, Group, Loader, Paper, ScrollArea, Stack, Text, TextInput, Title, UnstyledButton } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
-import { MessageSquareText, Plus, Send, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ActionIcon, Avatar, Box, Button, Group, Loader, Paper, ScrollArea, Stack, Text, TextInput, Title, UnstyledButton } from "@mantine/core";
+import { Send, Sparkles } from "lucide-react";
 import { api } from "../lib/api";
 import ChatWidget from "../components/ChatWidgets";
+import { useThreads } from "../context/ThreadsContext";
 import beginChatArt from "../assets/illustrations/begin-chat.svg";
 
 const SUGGESTIONS = ["What time is check-in?", "Is breakfast included?", "Do you have a pool?", "I'd like to book a room"];
@@ -21,65 +21,51 @@ const SLASH_COMMANDS = [
 SLASH_COMMANDS.find((c) => c.cmd === "/help").widget.commands = SLASH_COMMANDS;
 
 export default function ChatTab() {
-  const [threads, setThreads] = useState([]);
-  const [threadsLoading, setThreadsLoading] = useState(true);
-  const [threadId, setThreadId] = useState(null);
+  const { activeThreadId, setActiveThreadId, refreshThreads } = useThreads();
   const [messages, setMessages] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [widgetBusyIndex, setWidgetBusyIndex] = useState(null);
-  const [threadsOpened, { open: openThreadsDrawer, close: closeThreadsDrawer }] = useDisclosure(false);
   const bottomRef = useRef(null);
+  const loadedThreadIdRef = useRef(null);
 
-  const loadThreads = useCallback(async () => {
-    try {
-      const result = await api.listThreads();
-      setThreads(result.threads ?? []);
-    } catch {
-      // sidebar list is a convenience; leave it empty on failure
-    } finally {
-      setThreadsLoading(false);
-    }
-  }, []);
-
+  // The nested thread list lives in the sidebar nav now, so ChatTab only
+  // reacts to activeThreadId changing — it doesn't own thread selection.
+  // loadedThreadIdRef skips a redundant refetch right after this component
+  // itself set activeThreadId (e.g. after sending the first message of a
+  // new conversation, where the messages are already in local state).
   useEffect(() => {
-    loadThreads();
-  }, [loadThreads]);
+    if (activeThreadId === loadedThreadIdRef.current) return;
+    loadedThreadIdRef.current = activeThreadId;
+
+    if (activeThreadId === null) {
+      setMessages([]);
+      setError("");
+      return;
+    }
+
+    setError("");
+    setHistoryLoading(true);
+    api
+      .getThreadMessages(activeThreadId)
+      .then((result) => {
+        setMessages(
+          (result.messages ?? []).map((m) => ({
+            role: m.role,
+            content: m.content,
+            grounded: m.assistant_envelope?.grounded
+          }))
+        );
+      })
+      .catch((err) => setError(err.message || "Could not load that conversation."))
+      .finally(() => setHistoryLoading(false));
+  }, [activeThreadId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
-
-  function startNewChat() {
-    setThreadId(null);
-    setMessages([]);
-    setError("");
-    closeThreadsDrawer();
-  }
-
-  async function openThread(id) {
-    closeThreadsDrawer();
-    if (id === threadId) return;
-    setThreadId(id);
-    setError("");
-    setHistoryLoading(true);
-    try {
-      const result = await api.getThreadMessages(id);
-      setMessages(
-        (result.messages ?? []).map((m) => ({
-          role: m.role,
-          content: m.content,
-          grounded: m.assistant_envelope?.grounded
-        }))
-      );
-    } catch (err) {
-      setError(err.message || "Could not load that conversation.");
-    } finally {
-      setHistoryLoading(false);
-    }
-  }
 
   async function sendText(text) {
     if (!text || sending) return;
@@ -90,12 +76,13 @@ export default function ChatTab() {
     setSending(true);
 
     try {
-      const isNewThread = !threadId;
-      const result = await api.sendMessage(text, threadId);
-      setThreadId(result.threadId);
+      const isNewThread = !activeThreadId;
+      const result = await api.sendMessage(text, activeThreadId);
+      loadedThreadIdRef.current = result.threadId;
+      setActiveThreadId(result.threadId);
       const widget = result.intent === "booking" ? { type: "date_picker" } : null;
       setMessages((prev) => [...prev, { role: "assistant", content: result.answer, grounded: result.grounded, widget }]);
-      if (isNewThread) loadThreads();
+      if (isNewThread) refreshThreads();
     } catch (err) {
       setError(err.message || "Something went wrong.");
     } finally {
@@ -136,7 +123,7 @@ export default function ChatTab() {
       setWidgetBusyIndex(index);
       setError("");
       try {
-        const result = await api.checkAvailability({ checkIn, checkOut, adults, threadId });
+        const result = await api.checkAvailability({ checkIn, checkOut, adults, threadId: activeThreadId });
         resolveWidget(index);
         pushAssistant(
           result.data.rooms.length ? "Here are the rooms available for those dates:" : "Sorry, nothing is available for those dates.",
@@ -172,7 +159,7 @@ export default function ChatTab() {
           adults,
           pricePerNight: room.price,
           totalPrice: room.totalPrice,
-          threadId
+          threadId: activeThreadId
         });
         const paid = await api.payReservation(created.reservation.id);
         resolveWidget(index);
@@ -189,74 +176,11 @@ export default function ChatTab() {
   const isEmpty = !historyLoading && messages.length === 0;
   const slashMatches = input.startsWith("/") ? SLASH_COMMANDS.filter((c) => c.cmd.startsWith(input.trim())) : [];
 
-  const threadListBody = (
-    <>
-      <Button leftSection={<Plus size={16} />} variant="light" color="gold" fullWidth onClick={startNewChat} data-testid="new-chat">
-        New chat
-      </Button>
-      <ScrollArea mt="sm" style={{ flex: 1 }}>
-        <Stack gap={4}>
-          {threadsLoading && (
-            <Text size="xs" c="dimmed" ta="center" mt="md">
-              Loading…
-            </Text>
-          )}
-          {!threadsLoading && threads.length === 0 && (
-            <Text size="xs" c="dimmed" ta="center" mt="md">
-              No conversations yet.
-            </Text>
-          )}
-          {threads.map((t) => (
-            <UnstyledButton
-              key={t.id}
-              data-testid="thread-item"
-              onClick={() => openThread(t.id)}
-              p="xs"
-              style={{
-                borderRadius: 8,
-                background: t.id === threadId ? "#ccfbf1" : "transparent",
-                fontWeight: t.id === threadId ? 600 : 400
-              }}
-            >
-              <Text size="sm" truncate>
-                {t.title || "New conversation"}
-              </Text>
-            </UnstyledButton>
-          ))}
-        </Stack>
-      </ScrollArea>
-    </>
-  );
-
   return (
-    <Group align="stretch" gap="md" className="chat-shell" wrap="nowrap">
-      <Paper withBorder radius="lg" w={220} p="sm" visibleFrom="sm" style={{ display: "flex", flexDirection: "column" }}>
-        {threadListBody}
-      </Paper>
+    <Stack className="chat-shell" gap="md">
+      <Title order={3}>Chat</Title>
 
-      <Drawer opened={threadsOpened} onClose={closeThreadsDrawer} title="Conversations" hiddenFrom="sm" size="80%">
-        <Stack h="calc(100vh - 80px)" style={{ display: "flex", flexDirection: "column" }}>
-          {threadListBody}
-        </Stack>
-      </Drawer>
-
-      <Stack style={{ flex: 1, minWidth: 0 }} gap="md">
-        <Group justify="space-between">
-          <Title order={3}>Chat</Title>
-          <Button
-            hiddenFrom="sm"
-            size="xs"
-            variant="light"
-            color="gold"
-            leftSection={<MessageSquareText size={14} />}
-            onClick={openThreadsDrawer}
-            data-testid="open-threads"
-          >
-            Chats
-          </Button>
-        </Group>
-
-        <Paper withBorder radius="lg" p={0} style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <Paper withBorder radius="lg" p={0} style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <ScrollArea style={{ flex: 1 }} p="lg">
             {historyLoading && (
               <Group justify="center" mt="xl">
@@ -412,7 +336,6 @@ export default function ChatTab() {
             </form>
           </Box>
         </Paper>
-      </Stack>
-    </Group>
+    </Stack>
   );
 }

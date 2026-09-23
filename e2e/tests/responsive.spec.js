@@ -28,20 +28,24 @@ for (const [name, size] of Object.entries(VIEWPORTS)) {
       await page.screenshot({ path: `${SHOTS}/resp-${name}-01-auth.png`, fullPage: true });
     });
 
-    test(`${name}: chat + burger nav + drawer`, async ({ page }) => {
+    test(`${name}: chat + burger nav + nested threads`, async ({ page }) => {
       await signIn(page, GUEST);
       await page.screenshot({ path: `${SHOTS}/resp-${name}-02-chat.png`, fullPage: true });
 
       if (name === "mobile") {
         await page.getByTestId("nav-burger").click();
         await page.waitForTimeout(300);
+        await page.getByTestId("nav-chat").waitFor();
+        await page.getByTestId("new-chat").waitFor();
         await page.screenshot({ path: `${SHOTS}/resp-${name}-03-nav-drawer.png`, fullPage: true });
-        await page.keyboard.press("Escape");
+
+        // Chat nav item toggles the nested thread list open/closed.
+        await page.getByTestId("nav-chat").click();
+        await page.waitForTimeout(200);
+        await page.screenshot({ path: `${SHOTS}/resp-${name}-04-threads-collapsed.png`, fullPage: true });
+        await page.getByTestId("nav-chat").click();
         await page.waitForTimeout(200);
 
-        await page.getByTestId("open-threads").click();
-        await page.waitForTimeout(300);
-        await page.screenshot({ path: `${SHOTS}/resp-${name}-04-threads-drawer.png`, fullPage: true });
         await page.keyboard.press("Escape");
         await page.waitForTimeout(200);
       }
