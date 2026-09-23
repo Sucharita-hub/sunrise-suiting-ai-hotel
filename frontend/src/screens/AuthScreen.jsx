@@ -10,20 +10,15 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [pendingConfirmation, setPendingConfirmation] = useState(false);
 
   async function submit(event) {
     event.preventDefault();
     setError("");
-    setPendingConfirmation(false);
     setPending(true);
     try {
       if (mode === "signup") {
-        const { data, error: signUpError } = await signUp(email, password);
+        const { error: signUpError } = await signUp(email, password);
         if (signUpError) throw signUpError;
-        if (!data.session) {
-          setPendingConfirmation(true);
-        }
       } else {
         const { error: signInError } = await signIn(email, password);
         if (signInError) throw signInError;
@@ -97,13 +92,6 @@ export default function AuthScreen() {
                   {error}
                 </Alert>
               )}
-              {pendingConfirmation && (
-                <Alert color="gold" variant="light">
-                  Account created. If email confirmation is enabled on this Supabase project, check your inbox before
-                  signing in.
-                </Alert>
-              )}
-
               <Button type="submit" loading={pending} fullWidth mt="sm">
                 {mode === "signin" ? "Sign in" : "Create account"}
               </Button>

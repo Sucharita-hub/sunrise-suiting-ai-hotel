@@ -39,7 +39,18 @@ export function AuthProvider({ children }) {
     roleLoading,
     isStaff: role === "staff",
     loading: session === undefined,
-    signUp: (email, password) => supabase.auth.signUp({ email, password }),
+    signUp: async (email, password) => {
+      try {
+        const result = await api.signup(email, password);
+        const { error } = await supabase.auth.setSession({
+          access_token: result.session.access_token,
+          refresh_token: result.session.refresh_token
+        });
+        return { data: { session: result.session }, error };
+      } catch (error) {
+        return { data: { session: null }, error };
+      }
+    },
     signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
     signOut: () => supabase.auth.signOut()
   };

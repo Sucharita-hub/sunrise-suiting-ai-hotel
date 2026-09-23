@@ -28,6 +28,43 @@ export function createApp(deps = {}) {
     res.json({ ok: true, service: "sunrise-suites-backend" });
   });
 
+  // Public — no auth yet, this is what creates the account. Supabase's default
+  // confirm-then-email flow hits the free-tier email rate limit almost
+  // immediately during a demo, so this creates the user pre-confirmed via the
+  // admin API and signs them in server-side instead — no email is ever sent.
+  app.post("/api/auth/signup", async (req, res) => {
+    try {
+      const { email, password } = req.body || {};
+      if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ ok: false, error: "Enter a valid email address." });
+      }
+      if (typeof password !== "string" || password.length < 8) {
+        return res.status(400).json({ ok: false, error: "Password must be at least 8 characters." });
+      }
+
+      const db = supabaseAdmin();
+      const { error: createError } = await db.auth.admin.createUser({ email, password, email_confirm: true });
+      if (createError) {
+        const taken = createError.status === 422 || /already|registered|exists/i.test(createError.message || "");
+        return res.status(taken ? 409 : 400).json({
+          ok: false,
+          error: taken ? "An account with this email already exists." : "Could not create your account. Please try again."
+        });
+      }
+
+      const { data, error: signInError } = await db.auth.signInWithPassword({ email, password });
+      if (signInError || !data.session) {
+        console.error("SIGNUP_SIGNIN_ERROR", signInError);
+        return res.status(500).json({ ok: false, error: "Account created, but sign-in failed. Please sign in." });
+      }
+
+      return res.status(200).json({ ok: true, session: data.session });
+    } catch (error) {
+      console.error("SIGNUP_ERROR", error);
+      return res.status(500).json({ ok: false, error: "Could not create your account. Please try again." });
+    }
+  });
+
   app.post("/api/auth/bootstrap-profile", auth, async (req, res) => {
     try {
       const profile = await profiles.ensureProfile(req.user.id);

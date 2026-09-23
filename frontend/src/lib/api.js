@@ -27,6 +27,7 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  signup: (email, password) => request("/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) }),
   bootstrapProfile: () => request("/auth/bootstrap-profile", { method: "POST" }),
   sendMessage: (message, threadId) => request("/chat", { method: "POST", body: JSON.stringify({ message, threadId }) }),
   checkAvailability: (payload) => request("/availability", { method: "POST", body: JSON.stringify(payload) }),
