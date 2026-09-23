@@ -50,6 +50,7 @@ export default function ReservationsTab() {
 
       {reservations && reservations.length > 0 && (
         <Paper withBorder radius="lg" p="md">
+          <Table.ScrollContainer minWidth={520}>
           <Table verticalSpacing="sm">
             <Table.Thead>
               <Table.Tr>
@@ -84,6 +85,7 @@ export default function ReservationsTab() {
               ))}
             </Table.Tbody>
           </Table>
+          </Table.ScrollContainer>
         </Paper>
       )}
     </Stack>

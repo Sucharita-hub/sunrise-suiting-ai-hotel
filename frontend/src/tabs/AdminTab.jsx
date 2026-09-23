@@ -33,6 +33,7 @@ export default function AdminTab() {
 
         <Tabs.Panel value="reservations" pt="md">
           <Paper withBorder radius="lg" p="md">
+            <Table.ScrollContainer minWidth={560}>
             <Table verticalSpacing="sm">
               <Table.Thead>
                 <Table.Tr>
@@ -61,6 +62,7 @@ export default function AdminTab() {
                 ))}
               </Table.Tbody>
             </Table>
+            </Table.ScrollContainer>
             {reservations && reservations.length === 0 && (
               <Text c="dimmed" ta="center" py="md">
                 No reservations yet across any guest.

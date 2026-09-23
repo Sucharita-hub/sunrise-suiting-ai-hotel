@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionIcon, Avatar, Box, Button, Group, Loader, Paper, ScrollArea, Stack, Text, TextInput, Title, UnstyledButton } from "@mantine/core";
-import { Plus, Send, Sparkles } from "lucide-react";
+import { ActionIcon, Avatar, Box, Button, Drawer, Group, Loader, Paper, ScrollArea, Stack, Text, TextInput, Title, UnstyledButton } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { MessageSquareText, Plus, Send, Sparkles } from "lucide-react";
 import { api } from "../lib/api";
 import ChatWidget from "../components/ChatWidgets";
 import beginChatArt from "../assets/illustrations/begin-chat.svg";
@@ -29,6 +30,7 @@ export default function ChatTab() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [widgetBusyIndex, setWidgetBusyIndex] = useState(null);
+  const [threadsOpened, { open: openThreadsDrawer, close: closeThreadsDrawer }] = useDisclosure(false);
   const bottomRef = useRef(null);
 
   const loadThreads = useCallback(async () => {
@@ -54,9 +56,11 @@ export default function ChatTab() {
     setThreadId(null);
     setMessages([]);
     setError("");
+    closeThreadsDrawer();
   }
 
   async function openThread(id) {
+    closeThreadsDrawer();
     if (id === threadId) return;
     setThreadId(id);
     setError("");
@@ -185,47 +189,72 @@ export default function ChatTab() {
   const isEmpty = !historyLoading && messages.length === 0;
   const slashMatches = input.startsWith("/") ? SLASH_COMMANDS.filter((c) => c.cmd.startsWith(input.trim())) : [];
 
+  const threadListBody = (
+    <>
+      <Button leftSection={<Plus size={16} />} variant="light" color="gold" fullWidth onClick={startNewChat} data-testid="new-chat">
+        New chat
+      </Button>
+      <ScrollArea mt="sm" style={{ flex: 1 }}>
+        <Stack gap={4}>
+          {threadsLoading && (
+            <Text size="xs" c="dimmed" ta="center" mt="md">
+              Loading…
+            </Text>
+          )}
+          {!threadsLoading && threads.length === 0 && (
+            <Text size="xs" c="dimmed" ta="center" mt="md">
+              No conversations yet.
+            </Text>
+          )}
+          {threads.map((t) => (
+            <UnstyledButton
+              key={t.id}
+              data-testid="thread-item"
+              onClick={() => openThread(t.id)}
+              p="xs"
+              style={{
+                borderRadius: 8,
+                background: t.id === threadId ? "#ccfbf1" : "transparent",
+                fontWeight: t.id === threadId ? 600 : 400
+              }}
+            >
+              <Text size="sm" truncate>
+                {t.title || "New conversation"}
+              </Text>
+            </UnstyledButton>
+          ))}
+        </Stack>
+      </ScrollArea>
+    </>
+  );
+
   return (
-    <Group align="stretch" gap="md" h="calc(100vh - 3rem)" wrap="nowrap">
-      <Paper withBorder radius="lg" w={220} p="sm" style={{ display: "flex", flexDirection: "column" }}>
-        <Button leftSection={<Plus size={16} />} variant="light" color="gold" fullWidth onClick={startNewChat} data-testid="new-chat">
-          New chat
-        </Button>
-        <ScrollArea mt="sm" style={{ flex: 1 }}>
-          <Stack gap={4}>
-            {threadsLoading && (
-              <Text size="xs" c="dimmed" ta="center" mt="md">
-                Loading…
-              </Text>
-            )}
-            {!threadsLoading && threads.length === 0 && (
-              <Text size="xs" c="dimmed" ta="center" mt="md">
-                No conversations yet.
-              </Text>
-            )}
-            {threads.map((t) => (
-              <UnstyledButton
-                key={t.id}
-                data-testid="thread-item"
-                onClick={() => openThread(t.id)}
-                p="xs"
-                style={{
-                  borderRadius: 8,
-                  background: t.id === threadId ? "#ccfbf1" : "transparent",
-                  fontWeight: t.id === threadId ? 600 : 400
-                }}
-              >
-                <Text size="sm" truncate>
-                  {t.title || "New conversation"}
-                </Text>
-              </UnstyledButton>
-            ))}
-          </Stack>
-        </ScrollArea>
+    <Group align="stretch" gap="md" className="chat-shell" wrap="nowrap">
+      <Paper withBorder radius="lg" w={220} p="sm" visibleFrom="sm" style={{ display: "flex", flexDirection: "column" }}>
+        {threadListBody}
       </Paper>
 
+      <Drawer opened={threadsOpened} onClose={closeThreadsDrawer} title="Conversations" hiddenFrom="sm" size="80%">
+        <Stack h="calc(100vh - 80px)" style={{ display: "flex", flexDirection: "column" }}>
+          {threadListBody}
+        </Stack>
+      </Drawer>
+
       <Stack style={{ flex: 1, minWidth: 0 }} gap="md">
-        <Title order={3}>Chat</Title>
+        <Group justify="space-between">
+          <Title order={3}>Chat</Title>
+          <Button
+            hiddenFrom="sm"
+            size="xs"
+            variant="light"
+            color="gold"
+            leftSection={<MessageSquareText size={14} />}
+            onClick={openThreadsDrawer}
+            data-testid="open-threads"
+          >
+            Chats
+          </Button>
+        </Group>
 
         <Paper withBorder radius="lg" p={0} style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <ScrollArea style={{ flex: 1 }} p="lg">
@@ -279,7 +308,7 @@ export default function ChatTab() {
                         <Sparkles size={14} />
                       </Avatar>
                     )}
-                    <Box maw="72%">
+                    <Box maw={message.widget ? "min(480px, 94%)" : "72%"} style={{ minWidth: 0 }}>
                       <Paper
                         p="sm"
                         radius="lg"

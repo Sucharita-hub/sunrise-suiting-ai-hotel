@@ -32,3 +32,13 @@ html, body, #root {
     grid-template-columns: 1.1fr 1fr;
   }
 }
+
+.chat-shell {
+  height: calc(100dvh - 3rem);
+}
+
+@media (max-width: 768px) {
+  .chat-shell {
+    height: calc(100dvh - 7rem);
+  }
+}
