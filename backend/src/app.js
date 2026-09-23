@@ -85,6 +85,20 @@ export function createApp(deps = {}) {
     }
   });
 
+  app.get("/api/threads/:id/messages", auth, async (req, res) => {
+    try {
+      const id = await threads.ensureThread(req.params.id, req.user.id);
+      const messages = await threads.getMessages(id);
+      return res.json({ ok: true, messages });
+    } catch (error) {
+      if (error instanceof realThreads.ThreadAccessError) {
+        return res.status(404).json({ ok: false, error: error.message });
+      }
+      console.error("GET_THREAD_MESSAGES_ERROR", error);
+      return res.status(500).json({ ok: false, error: "Could not load conversation." });
+    }
+  });
+
   app.post("/api/chat", auth, async (req, res) => {
     try {
       const { message, threadId } = req.body || {};

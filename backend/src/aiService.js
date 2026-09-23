@@ -112,6 +112,19 @@ function hasBookingIntent(text) {
   return BOOKING_INTENT_WORDS.some((word) => lower.includes(word));
 }
 
+// "hi"/"hey" are too short for retrieveSections() to score against (tokenize()
+// drops words <=2 chars), so without this a plain greeting fell through to the
+// "not in knowledge base" fallback — a bad first impression for a guest-facing
+// assistant. Checked before retrieval so it never touches the LLM.
+const GREETING_PATTERN = /^(hi|hello|hey+|yo|howdy|good\s?(morning|afternoon|evening)|greetings)[!.,\s]*$/i;
+
+function isGreeting(message) {
+  return GREETING_PATTERN.test(message.trim());
+}
+
+const GREETING_REPLY =
+  "Hello! I'm the Sunrise Suites concierge. Ask me about rooms, check-in/out, breakfast, Wi-Fi, parking, or the cancellation policy — or head to \"Book a Stay\" to check availability.";
+
 function stripCodeFences(text) {
   return text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
@@ -131,6 +144,10 @@ export function isGrounded(reply, sections) {
 }
 
 export async function answerQuestion({ message, history = [] }) {
+  if (isGreeting(message)) {
+    return { answer: GREETING_REPLY, grounded: true, intent: "greeting", source: "deterministic" };
+  }
+
   const safeHistory = cleanHistory(history);
   const sections = retrieveSections(message);
   const intent = hasBookingIntent(message) ? "booking" : "info";

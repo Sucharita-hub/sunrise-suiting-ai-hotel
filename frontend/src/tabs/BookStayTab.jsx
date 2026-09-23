@@ -171,7 +171,7 @@ export default function BookStayTab() {
       <Modal opened={Boolean(confirmed)} onClose={() => setConfirmed(null)} title="Reservation confirmed" centered>
         {confirmed && (
           <Stack align="center">
-            <CheckCircle2 size={40} color="#dda02c" />
+            <CheckCircle2 size={40} color="#0d9488" />
             <Text ta="center">
               {confirmed.room_name}, {confirmed.check_in} → {confirmed.check_out}. Payment reference{" "}
               <Badge variant="light">{confirmed.payment_reference}</Badge>

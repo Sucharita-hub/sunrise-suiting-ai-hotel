@@ -73,7 +73,7 @@ export default function AdminTab() {
           <Paper withBorder radius="lg" p="md">
             <Stack gap="sm">
               {(flagged ?? []).map((q) => (
-                <Paper key={q.id} withBorder radius="md" p="sm" bg="gray.0">
+                <Paper key={q.id} data-testid="flagged-item" withBorder radius="md" p="sm" bg="gray.0">
                   <Text size="sm">{q.content}</Text>
                   <Text size="xs" c="dimmed" mt={4}>
                     {new Date(q.created_at).toLocaleString()}

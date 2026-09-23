@@ -1,16 +1,16 @@
 import { createTheme } from "@mantine/core";
 
-// Dusk take on "Sunrise Suites" — deep navy-plum ink with a gold accent,
-// deliberately not the bright orange/yellow a literal "sunrise" theme
-// would default to.
+// Slate + teal — a plain, modern working palette. Deliberately not the
+// bright orange/yellow a literal "sunrise" theme would default to, and not
+// a gold/navy "boutique hotel lounge" look either.
 export const theme = createTheme({
   primaryColor: "gold",
   colors: {
-    gold: ["#fdf6e8", "#f8e7c1", "#f3d798", "#eec86e", "#eabc4f", "#e8b23a", "#dda02c", "#c48c22", "#ab791b", "#916513"],
-    ink: ["#eceaf2", "#c9c4dc", "#a6a0c6", "#837bb0", "#645c95", "#4c4577", "#372f5c", "#241d3f", "#1b1730", "#120e21"]
+    gold: ["#f0fdfa", "#ccfbf1", "#99f6e4", "#5eead4", "#2dd4bf", "#14b8a6", "#0d9488", "#0f766e", "#115e59", "#134e4a"],
+    ink: ["#f1f5f9", "#cbd5e1", "#94a3b8", "#64748b", "#475569", "#334155", "#1e293b", "#0f172a", "#0b1220", "#060a12"]
   },
-  fontFamily: "Inter, system-ui, sans-serif",
-  headings: { fontFamily: "'Fraunces', Georgia, serif", fontWeight: "600" },
+  fontFamily: "'Sora', system-ui, sans-serif",
+  headings: { fontFamily: "'Playfair Display', Georgia, serif", fontWeight: "600" },
   defaultRadius: "md",
   components: {
     Button: { defaultProps: { radius: "md" } }

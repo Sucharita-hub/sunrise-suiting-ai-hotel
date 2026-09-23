@@ -44,6 +44,17 @@ export async function getHistory(threadId) {
   return (data ?? []).reverse();
 }
 
+export async function getMessages(threadId) {
+  const db = supabaseAdmin();
+  const { data, error } = await db
+    .from("thread_messages")
+    .select("role, content, assistant_envelope, created_at")
+    .eq("thread_id", threadId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 export async function getSlots(threadId) {
   const db = supabaseAdmin();
   const { data, error } = await db

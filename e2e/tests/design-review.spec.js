@@ -83,6 +83,10 @@ test("shot: admin", async ({ page }) => {
   await page.screenshot({ path: `${SHOTS}/09-admin-reservations.png`, fullPage: true });
 
   await page.getByRole("tab", { name: "Unanswered questions" }).click();
-  await page.getByText("No knowledge-base gaps recorded", { exact: false }).waitFor({ timeout: 15_000 });
+  await page
+    .getByTestId("flagged-item")
+    .first()
+    .or(page.getByText("No knowledge-base gaps recorded", { exact: false }))
+    .waitFor({ timeout: 15_000 });
   await page.screenshot({ path: `${SHOTS}/10-admin-flagged.png`, fullPage: true });
 });

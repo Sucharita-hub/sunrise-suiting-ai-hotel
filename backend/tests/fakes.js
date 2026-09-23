@@ -44,6 +44,15 @@ export function createFakeThreads() {
       const t = store.get(threadId);
       if (!t) throw new ThreadAccessError("Conversation not found.");
       t.turns.push({ role: "user", content: user.content }, { role: "assistant", content: assistant.content });
+      (t.messages ??= []).push(
+        { role: "user", content: user.content, assistant_envelope: null },
+        { role: "assistant", content: assistant.content, assistant_envelope: assistant.envelope ?? null }
+      );
+    },
+    async getMessages(threadId) {
+      const t = store.get(threadId);
+      if (!t) throw new ThreadAccessError("Conversation not found.");
+      return t.messages ?? [];
     },
     async titleIfUnset(threadId, title) {
       const t = store.get(threadId);

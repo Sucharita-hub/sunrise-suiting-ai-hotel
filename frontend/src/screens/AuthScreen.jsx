@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Box, Button, Paper, PasswordInput, SegmentedControl, Stack, Text, TextInput, Title, Alert } from "@mantine/core";
 import { useAuth } from "../context/AuthContext";
 import loginArt from "../assets/illustrations/login.svg";
 
-export default function AuthScreen() {
+export default function AuthScreen({ mode }) {
   const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState("signin");
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
@@ -23,6 +24,7 @@ export default function AuthScreen() {
         const { error: signInError } = await signIn(email, password);
         if (signInError) throw signInError;
       }
+      navigate("/", { replace: true });
     } catch (err) {
       setError(err.message === "Invalid login credentials" ? "Incorrect email or password." : err.message);
     } finally {
@@ -34,7 +36,7 @@ export default function AuthScreen() {
     <Box className="auth-grid" style={{ minHeight: "100vh" }}>
       <Box
         style={{
-          background: "linear-gradient(160deg, #1b1730 0%, #241d3f 60%, #372f5c 100%)",
+          background: "linear-gradient(160deg, #0f172a 0%, #134e4a 60%, #1e293b 100%)",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
@@ -53,13 +55,13 @@ export default function AuthScreen() {
         </Text>
       </Box>
 
-      <Box style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#faf8f4", padding: "2rem" }}>
+      <Box style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", padding: "2rem" }}>
         <Paper w={360} maw="100%" p="xl" radius="lg" withBorder shadow="sm">
           <SegmentedControl
             fullWidth
             mb="lg"
             value={mode}
-            onChange={setMode}
+            onChange={(value) => navigate(value === "signup" ? "/signup" : "/login")}
             data={[
               { label: "Sign in", value: "signin" },
               { label: "Create account", value: "signup" }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { Center, Loader } from "@mantine/core";
 import { useAuth } from "./context/AuthContext";
 import AuthScreen from "./screens/AuthScreen";
@@ -8,16 +8,43 @@ import BookStayTab from "./tabs/BookStayTab";
 import ReservationsTab from "./tabs/ReservationsTab";
 import AdminTab from "./tabs/AdminTab";
 
-const TABS = {
-  chat: ChatTab,
-  book: BookStayTab,
-  reservations: ReservationsTab,
-  admin: AdminTab
-};
+function ProtectedLayout() {
+  const { session } = useAuth();
+  if (!session) return <Navigate to="/login" replace />;
+  return (
+    <SidebarShell>
+      <Routes>
+        <Route index element={<ChatTab />} />
+        <Route path="book" element={<BookStayTab />} />
+        <Route path="reservations" element={<ReservationsTab />} />
+        <Route path="admin" element={<AdminGuard />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </SidebarShell>
+  );
+}
+
+function AdminGuard() {
+  const { isStaff, roleLoading } = useAuth();
+  if (roleLoading) {
+    return (
+      <Center h="60vh">
+        <Loader color="gold" />
+      </Center>
+    );
+  }
+  if (!isStaff) return <Navigate to="/" replace />;
+  return <AdminTab />;
+}
+
+function GuestOnlyLayout({ children }) {
+  const { session } = useAuth();
+  if (session) return <Navigate to="/" replace />;
+  return children;
+}
 
 export default function App() {
-  const { loading, session } = useAuth();
-  const [active, setActive] = useState("chat");
+  const { loading } = useAuth();
 
   if (loading) {
     return (
@@ -27,15 +54,25 @@ export default function App() {
     );
   }
 
-  if (!session) {
-    return <AuthScreen />;
-  }
-
-  const ActiveTab = TABS[active] ?? ChatTab;
-
   return (
-    <SidebarShell active={active} onNavigate={setActive}>
-      <ActiveTab />
-    </SidebarShell>
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <GuestOnlyLayout>
+            <AuthScreen mode="signin" />
+          </GuestOnlyLayout>
+        }
+      />
+      <Route
+        path="/signup"
+        element={
+          <GuestOnlyLayout>
+            <AuthScreen mode="signup" />
+          </GuestOnlyLayout>
+        }
+      />
+      <Route path="/*" element={<ProtectedLayout />} />
+    </Routes>
   );
 }
