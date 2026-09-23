@@ -21,7 +21,14 @@ export function createApp(deps = {}) {
   const flaggedQuestions = deps.flaggedQuestions ?? defaultFlaggedQuestions;
 
   const app = express();
-  app.use(cors({ origin: process.env.FRONTEND_ORIGIN || true }));
+  // Auth here is a bearer token verified per-request (no cookies, no
+  // credentials: 'include'), so there's no CORS security reason to pin a
+  // single origin. Pinning one caused "Failed to fetch" for anyone hitting
+  // the backend from a different origin than whatever FRONTEND_ORIGIN
+  // happened to be set to (preview URL, www vs bare domain, trailing
+  // slash, wrong alias) — reflecting the caller's origin removes that
+  // whole class of failure.
+  app.use(cors({ origin: true }));
   app.use(express.json({ limit: "100kb" }));
 
   app.get("/api/health", (_req, res) => {
